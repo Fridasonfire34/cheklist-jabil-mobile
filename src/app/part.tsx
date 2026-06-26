@@ -1,7 +1,9 @@
+import { BridgeSelectorModal } from "@/components/BridgeSelectorModal";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { getLastSelectedPart } from "@/lib/selection";
 import { getSession } from "@/lib/session";
+import { Bridge, getBridgeUrl } from "@/utils/bridgeManager";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
@@ -114,6 +116,214 @@ const STEPS: Step[] = [
     ],
   },
 ];
+
+// ─── Code 39 Barcode ─────────────────────────────────────────────────────────
+
+const CODE39: Record<string, number[]> = {
+  "0": [0, 0, 0, 1, 1, 0, 1, 0, 0],
+  "1": [1, 0, 0, 1, 0, 0, 0, 0, 1],
+  "2": [0, 0, 1, 1, 0, 0, 0, 0, 1],
+  "3": [1, 0, 1, 1, 0, 0, 0, 0, 0],
+  "4": [0, 0, 0, 1, 1, 0, 0, 0, 1],
+  "5": [1, 0, 0, 1, 1, 0, 0, 0, 0],
+  "6": [0, 0, 1, 1, 1, 0, 0, 0, 0],
+  "7": [0, 0, 0, 1, 0, 0, 1, 0, 1],
+  "8": [1, 0, 0, 1, 0, 0, 1, 0, 0],
+  "9": [0, 0, 1, 1, 0, 0, 1, 0, 0],
+  A: [1, 0, 0, 0, 0, 1, 0, 0, 1],
+  B: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+  C: [1, 0, 1, 0, 0, 1, 0, 0, 0],
+  D: [0, 0, 0, 0, 1, 1, 0, 0, 1],
+  E: [1, 0, 0, 0, 1, 1, 0, 0, 0],
+  F: [0, 0, 1, 0, 1, 1, 0, 0, 0],
+  G: [0, 0, 0, 0, 0, 1, 1, 0, 1],
+  H: [1, 0, 0, 0, 0, 1, 1, 0, 0],
+  I: [0, 0, 1, 0, 0, 1, 1, 0, 0],
+  J: [0, 0, 0, 0, 1, 1, 1, 0, 0],
+  K: [1, 0, 0, 0, 0, 0, 0, 1, 1],
+  L: [0, 0, 1, 0, 0, 0, 0, 1, 1],
+  M: [1, 0, 1, 0, 0, 0, 0, 1, 0],
+  N: [0, 0, 0, 0, 1, 0, 0, 1, 1],
+  O: [1, 0, 0, 0, 1, 0, 0, 1, 0],
+  P: [0, 0, 1, 0, 1, 0, 0, 1, 0],
+  Q: [0, 0, 0, 0, 0, 0, 1, 1, 1],
+  R: [1, 0, 0, 0, 0, 0, 1, 1, 0],
+  S: [0, 0, 1, 0, 0, 0, 1, 1, 0],
+  T: [0, 0, 0, 0, 1, 0, 1, 1, 0],
+  U: [1, 1, 0, 0, 0, 0, 0, 0, 1],
+  V: [0, 1, 1, 0, 0, 0, 0, 0, 1],
+  W: [1, 1, 1, 0, 0, 0, 0, 0, 0],
+  X: [0, 1, 0, 0, 1, 0, 0, 0, 1],
+  Y: [1, 1, 0, 0, 1, 0, 0, 0, 0],
+  Z: [0, 1, 1, 0, 1, 0, 0, 0, 0],
+  "-": [0, 1, 0, 0, 0, 0, 1, 0, 1],
+  ".": [1, 1, 0, 0, 0, 0, 1, 0, 0],
+  " ": [0, 1, 1, 0, 0, 0, 1, 0, 0],
+  "*": [1, 0, 0, 0, 1, 0, 1, 0, 0],
+};
+
+function Code39Barcode({
+  value,
+  barWidth = 1.6,
+  barHeight = 52,
+}: {
+  value: string;
+  barWidth?: number;
+  barHeight?: number;
+}) {
+  const encoded = `*${String(value).toUpperCase()}*`;
+  const els: { isBar: boolean; w: number }[] = [];
+  for (let i = 0; i < encoded.length; i++) {
+    const pat = CODE39[encoded[i]];
+    if (!pat) continue;
+    if (i > 0) els.push({ isBar: false, w: barWidth });
+    for (let j = 0; j < 9; j++) {
+      els.push({ isBar: j % 2 === 0, w: pat[j] ? barWidth * 3 : barWidth });
+    }
+  }
+  return (
+    <View style={{ flexDirection: "row", height: barHeight }}>
+      {els.map((el, idx) => (
+        <View
+          key={idx}
+          style={{
+            width: el.w,
+            height: barHeight,
+            backgroundColor: el.isBar ? "#000" : "#fff",
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function LabelPreviewModal({
+  visible,
+  labelId,
+  partName,
+  onPrint,
+  onClose,
+}: {
+  visible: boolean;
+  labelId: string;
+  partName: string;
+  onPrint: () => void;
+  onClose: () => void;
+}) {
+  // Label physical size: 54mm × 25mm (landscape), scaled to screen
+  const LABEL_W = 290;
+  const LABEL_H = 134; // ratio 54:25
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const h = now.getHours();
+  const printDate = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "PM" : "AM"}`;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={lbl.overlay}>
+        <View style={lbl.card}>
+          <ThemedText style={lbl.title}>Vista previa de etiqueta</ThemedText>
+
+          {/* Label canvas */}
+          <View style={[lbl.label, { width: LABEL_W, height: LABEL_H }]}>
+            <ThemedText style={lbl.dateText}>{printDate}</ThemedText>
+            <ThemedText style={lbl.partText}>{partName}</ThemedText>
+            <View style={lbl.barcodeWrap}>
+              <Code39Barcode value={labelId} barWidth={1.6} barHeight={52} />
+            </View>
+            <ThemedText style={lbl.idText}>Folio: {String(labelId)}</ThemedText>
+          </View>
+
+          <View style={lbl.btnRow}>
+            <TouchableOpacity style={lbl.printBtn} onPress={onPrint}>
+              <ThemedText style={lbl.printText}>Imprimir</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={lbl.closeBtn} onPress={onClose}>
+              <ThemedText style={lbl.closeText}>Ver reporte</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const lbl = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+  },
+  title: { fontSize: 17, fontWeight: "700", color: "#1a3a6b" },
+  subtitle: { fontSize: 12, color: "#888", marginTop: -6 },
+  label: {
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#222",
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    overflow: "hidden",
+  },
+  dateText: {
+    position: "absolute",
+    top: 4,
+    right: 6,
+    fontSize: 8,
+    color: "#000",
+  },
+  partText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#000",
+    letterSpacing: 0.3,
+  },
+  barcodeWrap: { alignItems: "center" },
+  idText: {
+    fontSize: 12,
+    color: "#000",
+    fontFamily: "monospace",
+    letterSpacing: 1,
+  },
+  btnRow: { flexDirection: "row", gap: 12, marginTop: 4 },
+  printBtn: {
+    flex: 1,
+    backgroundColor: "#1a56db",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  printText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  closeBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#1a56db",
+  },
+  closeText: { color: "#1a56db", fontWeight: "700", fontSize: 15 },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const FINAL_PHOTO_COUNT = STEPS.reduce(
   (acc, s) =>
@@ -352,6 +562,11 @@ export default function PartScreen() {
     Array(FINAL_PHOTO_COUNT).fill(null),
   );
   const [submitting, setSubmitting] = useState(false);
+  const [labelId, setLabelId] = useState<string | null>(null);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [printDate, setPrintDate] = useState<string>("");
+  const [showBridgeSelector, setShowBridgeSelector] = useState(false);
+  const [bridgePrinting, setBridgePrinting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   function goTo(index: number) {
@@ -429,8 +644,7 @@ export default function PartScreen() {
         );
         return;
       }
-      const saveData = await saveRes.json();
-      const { id } = saveData;
+      const { id } = await saveRes.json();
 
       const reportRes = await fetch(`${BASE}/Reporte`, {
         method: "POST",
@@ -449,15 +663,51 @@ export default function PartScreen() {
         return;
       }
 
-      router.push({ pathname: "/report", params: { url: `${BASE}/PDF/${id}` } });
+      setReportUrl(`${BASE}/PDF/${id}`);
+      setLabelId(id);
     } catch (err: any) {
-      console.error("Error al enviar validación:", err);
       Alert.alert(
         "Error de conexión",
         err?.message ?? "No se pudo conectar al servidor",
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function handleGoToReport() {
+    setLabelId(null);
+    if (reportUrl)
+      router.push({ pathname: "/report", params: { url: reportUrl } });
+  }
+
+  function handlePrint() {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const h = now.getHours();
+    setPrintDate(
+      `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "PM" : "AM"}`
+    );
+    setShowBridgeSelector(true);
+  }
+
+  async function handleBridgePrint(bridge: Bridge) {
+    setShowBridgeSelector(false);
+    setBridgePrinting(true);
+    try {
+      const url = `${getBridgeUrl(bridge.location, bridge.port)}/api/jabil/print`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ labelId: String(labelId), partName: part, printDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Error al imprimir");
+      Alert.alert("Impreso", `Etiqueta enviada a ${data.printerName}`);
+    } catch (err: any) {
+      Alert.alert("Error de impresión", err?.message ?? "No se pudo conectar al bridge");
+    } finally {
+      setBridgePrinting(false);
     }
   }
 
@@ -552,6 +802,21 @@ export default function PartScreen() {
           </TouchableOpacity>
         )}
       </View>
+      {labelId && (
+        <LabelPreviewModal
+          visible={!!labelId}
+          labelId={labelId}
+          partName={part}
+          onPrint={handlePrint}
+          onClose={handleGoToReport}
+        />
+      )}
+      <BridgeSelectorModal
+        visible={showBridgeSelector}
+        isLoading={bridgePrinting}
+        onSelectBridge={handleBridgePrint}
+        onCancel={() => setShowBridgeSelector(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

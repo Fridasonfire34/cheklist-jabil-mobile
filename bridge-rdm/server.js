@@ -257,6 +257,131 @@ const buildSingleLabelPdf = (filePath, label, presetKey) =>
     stream.on('error', reject);
   });
 
+// ─── Jabil label (Code 39 barcode) ───────────────────────────────────────────
+
+const CODE39_TABLE = {
+  '0':[0,0,0,1,1,0,1,0,0],'1':[1,0,0,1,0,0,0,0,1],'2':[0,0,1,1,0,0,0,0,1],
+  '3':[1,0,1,1,0,0,0,0,0],'4':[0,0,0,1,1,0,0,0,1],'5':[1,0,0,1,1,0,0,0,0],
+  '6':[0,0,1,1,1,0,0,0,0],'7':[0,0,0,1,0,0,1,0,1],'8':[1,0,0,1,0,0,1,0,0],
+  '9':[0,0,1,1,0,0,1,0,0],'A':[1,0,0,0,0,1,0,0,1],'B':[0,0,1,0,0,1,0,0,1],
+  'C':[1,0,1,0,0,1,0,0,0],'D':[0,0,0,0,1,1,0,0,1],'E':[1,0,0,0,1,1,0,0,0],
+  'F':[0,0,1,0,1,1,0,0,0],'G':[0,0,0,0,0,1,1,0,1],'H':[1,0,0,0,0,1,1,0,0],
+  'I':[0,0,1,0,0,1,1,0,0],'J':[0,0,0,0,1,1,1,0,0],'K':[1,0,0,0,0,0,0,1,1],
+  'L':[0,0,1,0,0,0,0,1,1],'M':[1,0,1,0,0,0,0,1,0],'N':[0,0,0,0,1,0,0,1,1],
+  'O':[1,0,0,0,1,0,0,1,0],'P':[0,0,1,0,1,0,0,1,0],'Q':[0,0,0,0,0,0,1,1,1],
+  'R':[1,0,0,0,0,0,1,1,0],'S':[0,0,1,0,0,0,1,1,0],'T':[0,0,0,0,1,0,1,1,0],
+  'U':[1,1,0,0,0,0,0,0,1],'V':[0,1,1,0,0,0,0,0,1],'W':[1,1,1,0,0,0,0,0,0],
+  'X':[0,1,0,0,1,0,0,0,1],'Y':[1,1,0,0,1,0,0,0,0],'Z':[0,1,1,0,1,0,0,0,0],
+  '-':[0,1,0,0,0,0,1,0,1],'.':[1,1,0,0,0,0,1,0,0],' ':[0,1,1,0,0,0,1,0,0],
+  '*':[1,0,0,0,1,0,1,0,0],
+};
+
+const buildJabilLabelPdf = (filePath, { labelId, partName, printDate }) =>
+  new Promise((resolve, reject) => {
+    // 54mm × 25.4mm landscape
+    const W = mmToPt(54);
+    const H = mmToPt(25.4);
+    const doc = new PDFDocument({ size: [W, H], margin: 0, compress: false });
+    const stream = fs.createWriteStream(filePath);
+    doc.pipe(stream);
+
+    doc.rect(0, 0, W, H).fill('#ffffff');
+
+    const MARGIN = mmToPt(2);
+
+    // Part name — top left
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#000000')
+       .text(toText(partName), MARGIN, MARGIN, { width: W * 0.6 });
+
+    // Print date — top right
+    doc.font('Helvetica').fontSize(6).fillColor('#000000')
+       .text(toText(printDate), 0, MARGIN, { width: W - MARGIN, align: 'right' });
+
+    // Code 39 barcode — centered
+    const encoded = `*${String(labelId).toUpperCase()}*`;
+    const N = 1.1; // narrow bar width in pt
+    const elements = [];
+    for (let i = 0; i < encoded.length; i++) {
+      const pat = CODE39_TABLE[encoded[i]];
+      if (!pat) continue;
+      if (i > 0) elements.push({ isBar: false, w: N });
+      for (let j = 0; j < 9; j++) {
+        elements.push({ isBar: j % 2 === 0, w: pat[j] ? N * 3 : N });
+      }
+    }
+    const totalW = elements.reduce((s, el) => s + el.w, 0);
+    const barcodeH = mmToPt(10);
+    const barcodeY = H * 0.34;
+    let x = (W - totalW) / 2;
+    elements.forEach(el => {
+      if (el.isBar) doc.rect(x, barcodeY, el.w, barcodeH).fill('#000000');
+      x += el.w;
+    });
+
+    // ID text below barcode
+    doc.font('Helvetica').fontSize(6).fillColor('#000000')
+       .text(`*${String(labelId)}*`, 0, barcodeY + barcodeH + mmToPt(0.8), {
+         width: W, align: 'center',
+       });
+
+    doc.end();
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+
+app.post('/api/jabil/print', async (req, res) => {
+  const labelId = toText(req.body?.labelId);
+  const partName = toText(req.body?.partName);
+  const printDate = toText(req.body?.printDate);
+  const requestedPrinter = toText(req.body?.printerName);
+
+  if (!labelId) {
+    res.status(400).json({ message: 'labelId es requerido.' });
+    return;
+  }
+
+  try {
+    const printers = await getPrinters();
+    const { selected: printerName, reason: printerSelectionReason } = resolvePrinterName(
+      printers, requestedPrinter, DEFAULT_PRINTER,
+    );
+
+    if (!printerName) {
+      res.status(404).json({
+        message: 'No se encontró una impresora válida.',
+        availablePrinters: printers.map(p => p?.name || ''),
+      });
+      return;
+    }
+
+    const tempPdfPath = path.join(os.tmpdir(), `jabil-${Date.now()}.pdf`);
+    await buildJabilLabelPdf(tempPdfPath, { labelId, partName, printDate });
+    await print(tempPdfPath, {
+      printer: printerName,
+      ...(SUMATRA_PATH ? { sumatraPdfPath: SUMATRA_PATH } : {}),
+      scale: 'noscale',
+      side: 'simplex',
+      copies: 1,
+    });
+    fs.promises.unlink(tempPdfPath).catch(() => {});
+
+    res.json({
+      ok: true,
+      printed: 1,
+      printerName,
+      bridge: { name: BRIDGE_NAME, location: BRIDGE_LOCATION, port: PORT },
+      printerSelectionReason,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'No fue posible imprimir la etiqueta.',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.get('/api/rdm/health', (_req, res) => {
   res.json({ ok: true, service: 'rdm-dymo-bridge' });
 });
