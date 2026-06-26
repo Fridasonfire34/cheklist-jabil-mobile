@@ -4,20 +4,22 @@ import { getLastSelectedPart } from "@/lib/selection";
 import { getSession } from "@/lib/session";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -322,6 +324,7 @@ function PhotoSlot({
 
 export default function PartScreen() {
   const router = useRouter();
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const part = getLastSelectedPart() ?? "CBM-101-004-00";
 
   const [step, setStep] = useState(0);
@@ -426,7 +429,8 @@ export default function PartScreen() {
         );
         return;
       }
-      const { id } = await saveRes.json();
+      const saveData = await saveRes.json();
+      const { id } = saveData;
 
       const reportRes = await fetch(`${BASE}/Reporte`, {
         method: "POST",
@@ -436,6 +440,7 @@ export default function PartScreen() {
           largo: dimValues.largo,
           ancho: dimValues.ancho,
           cantidadPem: pemCount,
+          userId: getSession() ?? "",
         }),
       });
       if (!reportRes.ok) {
@@ -444,7 +449,7 @@ export default function PartScreen() {
         return;
       }
 
-      await WebBrowser.openBrowserAsync(`${BASE}/ViewPDF/${id}`);
+      router.push({ pathname: "/report", params: { url: `${BASE}/PDF/${id}` } });
     } catch (err: any) {
       console.error("Error al enviar validación:", err);
       Alert.alert(
@@ -460,7 +465,10 @@ export default function PartScreen() {
   const isLast = step === STEPS.length - 1;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -506,7 +514,9 @@ export default function PartScreen() {
       </ScrollView>
 
       {/* Navigation buttons */}
-      <View style={styles.navRow}>
+      <View
+        style={[styles.navRow, { paddingBottom: Spacing.three + bottomInset }]}
+      >
         <TouchableOpacity
           style={[styles.navBtn, step === 0 && styles.navBtnDisabled]}
           onPress={handlePrev}
@@ -542,7 +552,7 @@ export default function PartScreen() {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -597,62 +607,68 @@ function StepCard({
     const anyErr = largoErr || anchoErr;
 
     return (
-      <View style={card.wrapper}>
-        {/* Número de Parte */}
-        <View style={card.section}>
-          <ThemedText style={card.sectionLabel}>Número de Parte</ThemedText>
-          <View style={card.refBadge}>
-            <ThemedText style={card.refText}>{step.numParte}</ThemedText>
-          </View>
-          <ConfirmRow
-            result={partInfoSub.numParte}
-            onResult={(v) => onPartInfoSub({ ...partInfoSub, numParte: v })}
-          />
-        </View>
-        <View style={card.divider} />
-        {/* Material */}
-        <View style={card.section}>
-          <ThemedText style={card.sectionLabel}>Material</ThemedText>
-          <View style={card.refBadge}>
-            <ThemedText style={card.refText}>{step.material}</ThemedText>
-          </View>
-          <ConfirmRow
-            result={partInfoSub.material}
-            onResult={(v) => onPartInfoSub({ ...partInfoSub, material: v })}
-          />
-        </View>
-        <View style={card.divider} />
-        {/* Dimensiones */}
-        <View style={card.dimRow}>
-          <View style={card.dimField}>
-            <ThemedText style={card.sectionLabel}>Largo Tapa</ThemedText>
-            <ThemedText style={card.refSmall}>{step.largoRef} </ThemedText>
-            <TextInput
-              style={[card.dimInput, largoErr && card.dimInputError]}
-              placeholder="Valor medido"
-              placeholderTextColor="#bbb"
-              value={dimValues.largo}
-              onChangeText={(t) => onDimChange({ ...dimValues, largo: t })}
-              keyboardType="decimal-pad"
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={card.wrapper}>
+          {/* Número de Parte */}
+          <View style={card.section}>
+            <ThemedText style={card.sectionLabel}>Número de Parte</ThemedText>
+            <View style={card.refBadge}>
+              <ThemedText style={card.refText}>{step.numParte}</ThemedText>
+            </View>
+            <ConfirmRow
+              result={partInfoSub.numParte}
+              onResult={(v) => onPartInfoSub({ ...partInfoSub, numParte: v })}
             />
           </View>
-          <View style={card.dimField}>
-            <ThemedText style={card.sectionLabel}>Ancho Tapa</ThemedText>
-            <ThemedText style={card.refSmall}>{step.anchoRef}</ThemedText>
-            <TextInput
-              style={[card.dimInput, anchoErr && card.dimInputError]}
-              placeholder="Valor medido"
-              placeholderTextColor="#bbb"
-              value={dimValues.ancho}
-              onChangeText={(t) => onDimChange({ ...dimValues, ancho: t })}
-              keyboardType="decimal-pad"
+          <View style={card.divider} />
+          {/* Material */}
+          <View style={card.section}>
+            <ThemedText style={card.sectionLabel}>Material</ThemedText>
+            <View style={card.refBadge}>
+              <ThemedText style={card.refText}>{step.material}</ThemedText>
+            </View>
+            <ConfirmRow
+              result={partInfoSub.material}
+              onResult={(v) => onPartInfoSub({ ...partInfoSub, material: v })}
             />
           </View>
+          <View style={card.divider} />
+          {/* Dimensiones */}
+          <View style={card.dimRow}>
+            <View style={card.dimField}>
+              <ThemedText style={card.sectionLabel}>Largo Tapa</ThemedText>
+              <ThemedText style={card.refSmall}>{step.largoRef} </ThemedText>
+              <TextInput
+                style={[card.dimInput, largoErr && card.dimInputError]}
+                placeholder="Valor medido"
+                placeholderTextColor="#bbb"
+                value={dimValues.largo}
+                onChangeText={(t) => onDimChange({ ...dimValues, largo: t })}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={card.dimField}>
+              <ThemedText style={card.sectionLabel}>Ancho Tapa</ThemedText>
+              <ThemedText style={card.refSmall}>{step.anchoRef}</ThemedText>
+              <TextInput
+                style={[card.dimInput, anchoErr && card.dimInputError]}
+                placeholder="Valor medido"
+                placeholderTextColor="#bbb"
+                value={dimValues.ancho}
+                onChangeText={(t) => onDimChange({ ...dimValues, ancho: t })}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </View>
+          <ThemedText style={anyErr ? card.toleranciaErr : card.tolerancia}>
+            {anyErr ? "✗ fuera de tolerancia" : "✓ dentro de tolerancia"}
+          </ThemedText>
         </View>
-        <ThemedText style={anyErr ? card.toleranciaErr : card.tolerancia}>
-          {anyErr ? "✗ fuera de tolerancia" : "✓ dentro de tolerancia"}
-        </ThemedText>
-      </View>
+      </ScrollView>
     );
   }
 

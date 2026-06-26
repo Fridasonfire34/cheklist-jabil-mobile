@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "checklistjabil",
+    "name": "Checklist Jabil",
     "slug": "checklistjabil",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./src/app/images/checklist jabil.png",
     "scheme": "checklistjabil",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./src/app/images/checklist jabil.png"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,8 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

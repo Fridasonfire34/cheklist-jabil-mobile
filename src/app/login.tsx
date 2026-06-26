@@ -8,7 +8,9 @@ import { useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
     Platform,
+    ScrollView,
     StyleSheet,
     Switch,
     TextInput,
@@ -69,79 +71,91 @@ export default function LoginScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.logoWrapper}>
-        <Image
-          source={require("./images/jabil.png")}
-          style={styles.logo}
-          contentFit="contain"
-        />
-      </View>
-      <View style={styles.box}>
-        <ThemedText type="title" style={styles.title}>
-          Iniciar sesión
-        </ThemedText>
-
-        <ThemedText style={styles.label}>ID (nómina)</ThemedText>
-        <TextInput
-          value={id}
-          onChangeText={setId}
-          style={styles.input}
-          placeholder="000000"
-          placeholderTextColor="#888"
-          keyboardType="default"
-          autoCapitalize="none"
-          autoCorrect={false}
-          onSubmitEditing={() => passwordInputRef.current?.focus()}
-        />
-
-        <ThemedText style={styles.label}>Contraseña</ThemedText>
-        <TextInput
-          ref={passwordInputRef}
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          placeholder="Contraseña"
-          placeholderTextColor="#888"
-          secureTextEntry={secure}
-          autoCapitalize="none"
-          onSubmitEditing={handleLogin}
-        />
-
-        <View style={styles.showRow}>
-          <Switch
-            value={!secure}
-            onValueChange={(v) => setSecure(!v)}
-            trackColor={{ true: "#4ea1ff", false: "#ccc" }}
-            thumbColor={
-              Platform.OS === "android"
-                ? !secure
-                  ? "#fff"
-                  : "#fff"
-                : undefined
-            }
-          />
-          <ThemedText style={styles.showLabel}>Mostrar contraseña</ThemedText>
-        </View>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleLogin}
-          disabled={loading}
+    <ThemedView style={styles.outerContainer}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.buttonText}>Entrar</ThemedText>
-          )}
-        </TouchableOpacity>
-      </View>
+          <View style={styles.logoWrapper}>
+            <Image
+              source={require("./images/jabil.png")}
+              style={styles.logo}
+              contentFit="contain"
+            />
+          </View>
+          <View style={styles.box}>
+            <ThemedText type="title" style={styles.title}>
+              Iniciar sesión
+            </ThemedText>
+
+            <ThemedText style={styles.label}>ID (nómina)</ThemedText>
+            <TextInput
+              value={id}
+              onChangeText={setId}
+              style={styles.input}
+              placeholder="000000"
+              placeholderTextColor="#888"
+              keyboardType="default"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
+            />
+
+            <ThemedText style={styles.label}>Contraseña</ThemedText>
+            <TextInput
+              ref={passwordInputRef}
+              value={password}
+              onChangeText={setPassword}
+              style={styles.input}
+              placeholder="Contraseña"
+              placeholderTextColor="#888"
+              secureTextEntry={secure}
+              autoCapitalize="none"
+              onSubmitEditing={handleLogin}
+            />
+
+            <View style={styles.showRow}>
+              <Switch
+                value={!secure}
+                onValueChange={(v) => setSecure(!v)}
+                trackColor={{ true: "#4ea1ff", false: "#ccc" }}
+                thumbColor={
+                  Platform.OS === "android"
+                    ? !secure
+                      ? "#fff"
+                      : "#fff"
+                    : undefined
+                }
+              />
+              <ThemedText style={styles.showLabel}>Mostrar contraseña</ThemedText>
+            </View>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <ThemedText style={styles.buttonText}>Entrar</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center" },
+  outerContainer: { flex: 1 },
+  container: { flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 16 },
   box: {
     width: "100%",
     maxWidth: 420,
