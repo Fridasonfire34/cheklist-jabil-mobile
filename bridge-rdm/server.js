@@ -319,10 +319,17 @@ const buildJabilLabelPdf = (filePath, { labelId, partName, printDate }) =>
     });
 
     // ID text below barcode
+    const idY = barcodeY + barcodeH + mmToPt(0.8);
     doc.font('Helvetica').fontSize(6).fillColor('#000000')
-       .text(`*${String(labelId)}*`, 0, barcodeY + barcodeH + mmToPt(0.8), {
-         width: W, align: 'center',
-       });
+       .text(String(labelId), 0, idY, { width: W, align: 'center' });
+
+    // TMP logo
+    const logoPath = path.join(EXE_DIR, 'TMP.png');
+    if (fs.existsSync(logoPath)) {
+      const logoW = mmToPt(12);
+      const logoH = mmToPt(5);
+      doc.image(logoPath, (W - logoW) / 2, idY + mmToPt(3), { width: logoW, height: logoH });
+    }
 
     doc.end();
     stream.on('finish', resolve);

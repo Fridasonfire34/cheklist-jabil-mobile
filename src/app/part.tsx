@@ -217,7 +217,7 @@ function LabelPreviewModal({
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const h = now.getHours();
-  const printDate = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "PM" : "AM"}`;
+  const printDate = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${String(now.getFullYear()).slice(-2)} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "pm" : "am"}`;
 
   return (
     <Modal
@@ -232,12 +232,21 @@ function LabelPreviewModal({
 
           {/* Label canvas */}
           <View style={[lbl.label, { width: LABEL_W, height: LABEL_H }]}>
-            <ThemedText style={lbl.dateText}>{printDate}</ThemedText>
-            <ThemedText style={lbl.partText}>{partName}</ThemedText>
-            <View style={lbl.barcodeWrap}>
-              <Code39Barcode value={labelId} barWidth={1.6} barHeight={52} />
+            {/* Fila superior: número de parte + fecha */}
+            <View style={lbl.topRow}>
+              <ThemedText style={lbl.partText}>{partName}</ThemedText>
+              <ThemedText style={lbl.dateText}>{printDate}</ThemedText>
             </View>
-            <ThemedText style={lbl.idText}>Folio: {String(labelId)}</ThemedText>
+            {/* Código de barras */}
+            <Code39Barcode value={labelId} barWidth={1.5} barHeight={56} />
+            {/* ID numérico */}
+            <ThemedText style={lbl.idText}>{String(labelId)}</ThemedText>
+            {/* Logo TMP */}
+            <Image
+              source={require("./images/TMP.png")}
+              style={lbl.tmpLogo}
+              resizeMode="contain"
+            />
           </View>
 
           <View style={lbl.btnRow}>
@@ -276,32 +285,37 @@ const lbl = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#222",
     borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 2,
     overflow: "hidden",
   },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  partText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#000",
+    letterSpacing: 0.2,
+  },
   dateText: {
-    position: "absolute",
-    top: 4,
-    right: 6,
     fontSize: 8,
     color: "#000",
   },
-  partText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#000",
-    letterSpacing: 0.3,
-  },
-  barcodeWrap: { alignItems: "center" },
   idText: {
-    fontSize: 12,
+    fontSize: 9,
     color: "#000",
-    fontFamily: "monospace",
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+    alignSelf: "center",
+  },
+  tmpLogo: {
+    width: 48,
+    height: 18,
+    alignSelf: "center",
   },
   btnRow: { flexDirection: "row", gap: 12, marginTop: 4 },
   printBtn: {
@@ -686,7 +700,7 @@ export default function PartScreen() {
     const pad = (n: number) => String(n).padStart(2, "0");
     const h = now.getHours();
     setPrintDate(
-      `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "PM" : "AM"}`
+      `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${String(now.getFullYear()).slice(-2)} ${h % 12 || 12}:${pad(now.getMinutes())} ${h >= 12 ? "pm" : "am"}`
     );
     setShowBridgeSelector(true);
   }
@@ -701,8 +715,10 @@ export default function PartScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ labelId: String(labelId), partName: part, printDate }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message ?? "Error al imprimir");
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch { /* respuesta no es JSON */ }
+      if (!res.ok) throw new Error(data?.message ?? `Error ${res.status} — actualiza el bridge`);
       Alert.alert("Impreso", `Etiqueta enviada a ${data.printerName}`);
     } catch (err: any) {
       Alert.alert("Error de impresión", err?.message ?? "No se pudo conectar al bridge");
