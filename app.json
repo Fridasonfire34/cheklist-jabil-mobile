@@ -11,12 +11,7 @@
       "icon": "./src/app/images/checklist jabil.png"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+      "icon": "./src/app/images/checklist jabil.png",
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.checklistjabil"
     },
